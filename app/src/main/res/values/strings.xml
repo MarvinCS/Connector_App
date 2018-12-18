@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">CLAK</string>
+    <string name="loginID">loginID</string>
+    <string name="password">Password</string>
+    <string name="stop">Stop</string>
+    <string name="start">Start</string>
+    <string name="ssid">ssid</string>
+    <string name="wifipicker">Choose your network</string>
+    <string name="update_interval">Time in minutes</string>
+    <string name="your_ip">Your IP:</string>
+    <string name="your_loginid">Your loginID:</string>
+    <string name="lbl_update_interval">Update Interval:</string>
+    <string name="your_password">Your Password:</string>
+    <string name="ip">IP</string>
+    <string name="credentials_loginID">loginID</string>
+    <string name="credentials_password">password</string>
+    <string name="credentials_ip">ip</string>
+    <string name="credentials_interval">interval</string>
+    <string name="credentials_network">network</string>
+    <string name="credentials_default">\"defaultValue\"</string>
+    <string name="error_interval">invalid interval</string>
+    <string name="cancel">Cancel</string>
+    <string name="enable_gps">You have to enable GPS</string>
+    <string name="fetch_ip">Fetch IP</string>
+</resources>
