@@ -2,30 +2,31 @@ package de.marvincs.clak;
 
 import android.Manifest;
 import android.app.AlertDialog;
+import android.app.TimePickerDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.location.LocationManager;
-import android.net.NetworkInfo;
 import android.net.wifi.ScanResult;
-import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 
-import android.widget.RelativeLayout;
-import android.widget.TextView;
+import android.widget.ListView;
+import android.widget.TimePicker;
 import android.widget.Toast;
+
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -35,19 +36,35 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static de.marvincs.clak.DataManager.calendarToTime;
+
+
 public class MainActivity extends AppCompatActivity {
 
-
-    private EditText loginID, password, interval;
-    private Button fetch_ip, network, start, stop;
+    // Edittexts and Buttons in View
+    private EditText loginID, password;
+    private Button network, addTime;
     private BroadcastReceiver wifiReceiver;
+
+    // For WifiPicker
     private WifiManager mWifiManager;
-    private RelativeLayout loading;
-    private TextView ip;
+
+
+    // Timemanagement
+    private ListView timeList;
+    private ArrayAdapter<String> listAdapter;
+
+    // DataManager
+    private DataManager dataManager;
+
 
     private static final String IP_URL = "https://login.rz.ruhr-uni-bochum.de/cgi-bin/start";
     private static final Pattern IP_REGEX = Pattern.compile("(?<=name=\"ipaddr\" value=\")[\\d\\.]+");
@@ -57,39 +74,39 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+        this.dataManager = DataManager.getInstance(PreferenceManager.getDefaultSharedPreferences(this));
         this.bindViewElements();
         this.readCredentials();
+        this.getTimes();
+        this.updateTimeList();
         registerReceiver(wifiReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction("android.net.wifi.SCAN_RESULTS");
         this.registerReceiver(wifiReceiver, intentFilter);
-
     }
+
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        save();
+        saveInService();
+    }
+
+    private void saveInService() {
+        Intent myIntent = new Intent(getApplicationContext(), RequestService.class);
+        myIntent.putExtra(RequestService.DATAMANAGER, dataManager);
+        myIntent.setAction(RequestService.ACTION_SAVE_CREDENTIALS);
+        startService(myIntent);
+    }
+
 
     private void bindViewElements() {
         this.loginID = findViewById(R.id.et_loginID);
         this.password = findViewById(R.id.et_password);
-        this.ip = findViewById(R.id.tv_ip);
-        this.interval = findViewById(R.id.et_update_interval);
-        this.fetch_ip = findViewById(R.id.btn_fetch_ip);
         this.network = findViewById(R.id.btn_wifipicker);
-        this.start = findViewById(R.id.btn_start);
-        this.stop = findViewById(R.id.btn_stop);
-
-
-        this.start.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                saveCredentials();
-                Intent myIntent = new Intent(getApplicationContext(), RequestService.class);
-                myIntent.putExtra(RequestService.NETWORKNAME, network.getText().toString());
-                myIntent.putExtra(RequestService.LOGINID, loginID.getText().toString().trim());
-                myIntent.putExtra(RequestService.PASSWORD, password.getText().toString().trim());
-                myIntent.setAction(RequestService.ACTION_CONNECT);
-                startService(myIntent);
-            }
-        });
-
+        this.addTime = findViewById(R.id.btn_addTime);
+        this.timeList = findViewById(R.id.timeList);
         wifiReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context c, Intent intent) {
@@ -103,6 +120,42 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
+        this.addTime.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final Calendar myCalendar = Calendar.getInstance();
+                final int hour = myCalendar.get(Calendar.HOUR_OF_DAY);
+                int minute = myCalendar.get(Calendar.MINUTE);
+                new TimePickerDialog(MainActivity.this, new TimePickerDialog.OnTimeSetListener() {
+                    @Override
+                    public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
+                        Calendar c = Calendar.getInstance();
+                        c.set(Calendar.HOUR_OF_DAY, hourOfDay);
+                        c.set(Calendar.MINUTE, minute);
+                        if (!dataManager.containsTime(c)) {
+                            dataManager.addTime(c);
+                            updateTimeList();
+                        } else {
+                            Toast.makeText(MainActivity.this, "This time is already in your list.", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                }, hour, minute, true).show();
+            }
+
+        });
+
+
+        this.timeList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view,
+                                    int position, long id) {
+                Toast.makeText(getApplicationContext(),
+                        "Click ListItem Number " + position, Toast.LENGTH_LONG)
+                        .show();
+            }
+        });
+
+
         this.network.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -114,8 +167,8 @@ public class MainActivity extends AppCompatActivity {
                 listNetworks();
             }
         });
-
     }
+
 
     private void listNetworks() {
         mWifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -125,7 +178,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showWifiListDialog(List<ScanResult> results) {
         AlertDialog.Builder builderSingle = new AlertDialog.Builder(this);
-        final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<String>(this, android.R.layout.select_dialog_item);
+        final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.select_dialog_item);
 
         for (ScanResult r : results) {
             if (r == null || r.SSID == null) continue;
@@ -141,6 +194,7 @@ public class MainActivity extends AppCompatActivity {
                     public void onClick(DialogInterface dialog, int which) {
                         dialog.dismiss();
                         wifiReceiver.abortBroadcast();
+                        mWifiManager = null;
                     }
                 });
 
@@ -150,6 +204,7 @@ public class MainActivity extends AppCompatActivity {
                 String strName = arrayAdapter.getItem(which);
                 Toast.makeText(getApplicationContext(), "Selected " + strName, Toast.LENGTH_SHORT).show();
                 network.setText(strName);
+                mWifiManager = null;
             }
         });
 
@@ -197,63 +252,49 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    private void readCredentials() {
-        SharedPreferences sharedPref = this.getPreferences(Context.MODE_PRIVATE);
-        String defaultValue = getResources().getString(R.string.credentials_default);
-        String loginID = sharedPref.getString(getString(R.string.credentials_loginID), defaultValue);
-        String password = sharedPref.getString(getString(R.string.credentials_password), defaultValue);
-        String ip = sharedPref.getString(getString(R.string.credentials_ip), defaultValue);
-        String network = sharedPref.getString(getString(R.string.credentials_network), defaultValue);
-        int interval = sharedPref.getInt(getString(R.string.credentials_interval), -1);
 
-        if (!loginID.equals(defaultValue)) {
-            this.loginID.setText(loginID);
+    private void getTimes() {
+        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss", Locale.GERMANY);
+        dataManager.getTimes();
+    }
+
+    void updateTimeList() {
+        List<String> timeList = new ArrayList<>();
+        for (Calendar time : this.dataManager.getTimes()) {
+            timeList.add(calendarToTime(time));
         }
-        if (!password.equals(defaultValue)) {
-            this.password.setText(password);
+        // Create ArrayAdapter using the planet list.
+        listAdapter = new ArrayAdapter<>(this, R.layout.simplerow, timeList);
+        this.timeList.setAdapter(listAdapter);
+    }
+
+    private void readCredentials() {
+        dataManager.load(this);
+        if (dataManager.getLoginID() != null) {
+            this.loginID.setText(dataManager.getLoginID());
         }
-        if (!ip.equals(defaultValue)) {
-            this.ip.setText(ip);
-        } else if (RequestService.ip != null) {
-            this.ip.setText(RequestService.ip.trim());
+        if (dataManager.getPassword() != null) {
+            this.password.setText(dataManager.getPassword());
         }
-        if (!network.equals(defaultValue)) {
-            this.network.setText(network);
-        }
-        if (interval > 0) {
-            this.interval.setText(String.valueOf(interval));
+        if (dataManager.getNetwork() != null) {
+            this.network.setText(dataManager.getNetwork());
         }
     }
 
-    private void saveCredentials() {
-        SharedPreferences sharedPref = this.getPreferences(Context.MODE_PRIVATE);
-        SharedPreferences.Editor editor = sharedPref.edit();
-
+    /**
+     * Save Credentials to shared preferences
+     */
+    private void save() {
         if (!this.loginID.getText().toString().trim().isEmpty()) {
-            editor.putString(getString(R.string.credentials_loginID), this.loginID.getText().toString().trim());
+            this.dataManager.setLoginID(this.loginID.getText().toString().trim());
         }
         if (!this.password.getText().toString().trim().isEmpty()) {
-            editor.putString(getString(R.string.credentials_password), this.password.getText().toString().trim());
-        }
-        if (!this.ip.getText().toString().trim().isEmpty()) {
-            editor.putString(getString(R.string.credentials_ip), this.ip.getText().toString().trim());
-        } else if (RequestService.ip != null) {
-            editor.putString(getString(R.string.credentials_ip), RequestService.ip.trim());
-        }
-
-        if (!this.interval.getText().toString().trim().isEmpty()) {
-            int interval = Integer.parseInt(this.interval.getText().toString().trim());
-            if (interval > 0) {
-                editor.putInt(getString(R.string.credentials_interval), interval);
-            } else {
-                Toast.makeText(this, getString(R.string.error_interval), Toast.LENGTH_LONG).show();
-            }
+            this.dataManager.setPassword(this.password.getText().toString().trim());
         }
         if (!this.network.getText().toString().equals(getString(R.string.wifipicker))) {
-            editor.putString(getString(R.string.credentials_network), this.network.getText().toString().trim());
+            this.dataManager.setNetwork(this.network.getText().toString().trim());
         }
-        editor.apply();
-
+        dataManager.save(this);
     }
 
 }

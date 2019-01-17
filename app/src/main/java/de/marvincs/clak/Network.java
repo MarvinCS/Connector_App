@@ -1,73 +1,196 @@
 package de.marvincs.clak;
 
-import android.os.AsyncTask;
+import android.content.Context;
+import android.content.Intent;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.util.Log;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-public class Network extends AsyncTask<String, Void, String> {
-    String server_response;
+public class Network {
+    // URLs
+    private static final String IP_URL = "https://login.rz.ruhr-uni-bochum.de/cgi-bin/start";
+    private static final String CONNECT_URL = "https://login.rz.ruhr-uni-bochum.de/cgi-bin/laklogin";
+    private static final String CHECK_URL = "http://google.com";
 
-    @Override
-    protected String doInBackground(String... strings) {
+    // Parameter
+    protected static final String LOGINID = "loginid";
+    protected static final String PASSWORD = "password";
+    protected static final String IPADRESS = "ipaddr";
+    protected static final String ACTION = "action";
+    protected static final String HTTP_ACTION = "action";
+    protected static final String NETWORKNAME = "networkname";
 
-        URL url;
-        HttpURLConnection urlConnection = null;
+    // Regex to get IP
+    protected static final Pattern IP_REGEX = Pattern.compile("(?<=name=\"ipaddr\" value=\")[\\d\\.]+");
+    protected static String ip;
 
-        try {
-            url = new URL(strings[0]);
-            urlConnection = (HttpURLConnection) url.openConnection();
 
-            int responseCode = urlConnection.getResponseCode();
+    private static String getRequestBody(String username, String password, String ip) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(LOGINID);
+        sb.append("=");
+        sb.append(username);
+        sb.append("&");
+        sb.append(PASSWORD);
+        sb.append("=");
+        sb.append(password);
+        sb.append("&");
+        sb.append(IPADRESS);
+        sb.append("=");
+        sb.append(ip);
+        sb.append("&");
+        sb.append(HTTP_ACTION);
+        sb.append("=");
+        sb.append("Login");
+        return sb.toString();
+    }
 
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                server_response = readStream(urlConnection.getInputStream());
-                Log.v("CatalogClient", server_response);
+    public static boolean check_rub_network(Context context, String network) {
+        WifiManager wifi = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        if (!wifi.isWifiEnabled()) {
+            return false;
+        }
+        WifiInfo wifiInfo = wifi.getConnectionInfo();
+        if (wifiInfo != null) {
+            NetworkInfo.DetailedState state = WifiInfo.getDetailedStateOf(wifiInfo.getSupplicantState());
+            if (state == NetworkInfo.DetailedState.CONNECTED || state == NetworkInfo.DetailedState.OBTAINING_IPADDR) {
+                String ssid = wifiInfo.getSSID().trim();
+                ssid = ssid.substring(1, ssid.length());
+                ssid = ssid.substring(0, ssid.length() - 1);
+                return ssid.toLowerCase().equals(network.trim().toLowerCase());
             }
+        }
+        return false;
+    }
 
+
+    protected int login(String loginid, String password, String ip) {
+        Log.i("MCSAPP - Network", "Logging in");
+        URL url;
+        HttpURLConnection connection = null;
+        int responseCode = 0;
+        try {
+            url = new URL(CONNECT_URL);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type",
+                    "application/x-www-form-urlencoded");
+
+            connection.setRequestProperty("Content-Language", "en-US");
+
+            connection.setUseCaches(false);
+            connection.setDoInput(true);
+            connection.setDoOutput(true);
+
+            //Send request
+            String credentials = getRequestBody(loginid, password, ip);
+            byte[] credentialsInBytes = credentials.getBytes("UTF-8");
+            OutputStream os = connection.getOutputStream();
+            os.write(credentialsInBytes);
+            os.close();
+
+
+            //Get Response
+            InputStream is = connection.getInputStream();
+            BufferedReader rd = new BufferedReader(new InputStreamReader(is));
+            String line;
+            StringBuffer response = new StringBuffer();
+            while ((line = rd.readLine()) != null) {
+                response.append(line);
+                response.append('\r');
+            }
+            rd.close();
+            responseCode = connection.getResponseCode();
+            Log.i("MCSAPP", response.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+        return responseCode;
+    }
+
+
+    public boolean isConnected() {
+        URL url = null;
+        try {
+            url = new URL(CHECK_URL);
         } catch (MalformedURLException e) {
             e.printStackTrace();
+        }
+        HttpURLConnection urlConnection = null;
+        try {
+            urlConnection = (HttpURLConnection) url.openConnection();
+            urlConnection.setRequestMethod("HEAD");
+            urlConnection.setConnectTimeout(10000); //set timeout to 5 seconds
+            int statusCode = urlConnection.getResponseCode();
+            Log.d("", "" + statusCode);
+        } catch (java.net.SocketTimeoutException e) {
+            return false;
         } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+            if (urlConnection != null) {
+                urlConnection.disconnect();
+            }
         }
-
-        return null;
+        return true;
     }
 
-    @Override
-    protected void onPostExecute(String s) {
-        super.onPostExecute(s);
-        Log.e("Response", "" + server_response);
-    }
-
-
-    // Converting InputStream to String
-    private String readStream(InputStream in) {
-        BufferedReader reader = null;
-        StringBuffer response = new StringBuffer();
+    protected String fetch_ip() {
+        Log.i("MCSAPP", "fetchingIP");
+        URL url = null;
         try {
-            reader = new BufferedReader(new InputStreamReader(in));
-            String line = "";
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
+            url = new URL(IP_URL);
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        }
+        HttpURLConnection urlConnection = null;
+        try {
+            urlConnection = (HttpURLConnection) url.openConnection();
+            urlConnection.setRequestProperty("User-Agent", "Mozilla/5.0 ( compatible ) ");
+            urlConnection.setRequestProperty("Accept", "*/*");
+            urlConnection.setRequestProperty("connection", "close");
+
+            InputStream in = new BufferedInputStream(urlConnection.getInputStream());
+            BufferedReader r = new BufferedReader(new InputStreamReader(in));
+            StringBuilder total = new StringBuilder();
+            String line;
+
+            while ((line = r.readLine()) != null) {
+                if (line.contains("name=\"ipaddr\"")) {
+                    total.append(line);
+                    break;
+                }
+            }
+
+            Matcher m = IP_REGEX.matcher(total.toString());
+            if (m.find()) {
+                ip = m.group(0);
+                Log.e("", ip);
             }
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
-            if (reader != null) {
-                try {
-                    reader.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+            if (urlConnection != null) {
+                urlConnection.disconnect();
             }
         }
-        return response.toString();
+        return ip;
     }
 }
