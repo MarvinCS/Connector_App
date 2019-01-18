@@ -28,13 +28,13 @@ public class RequestService extends IntentService {
     public RequestService() {
         super("CLAK - Request Service");
         Log.i("MCSAPP - RequestService", "Create Service");
-        mnm = new MyNotificationManager(this);
     }
 
 
     @Override
     protected void onHandleIntent(Intent intent) {
         Log.i("MCSAPP - RequestService", "Called onHandleWork");
+        mnm = new MyNotificationManager(this);
         final String action = intent.getAction();
         this.dataManager = new DataManager(this);
         if (dataManager.credentialsStored()) {

@@ -28,6 +28,8 @@ import android.widget.ListView;
 import android.widget.TimePicker;
 import android.widget.Toast;
 
+import com.codetroopers.betterpickers.radialtimepicker.RadialTimePickerDialogFragment;
+
 import java.util.Calendar;
 import java.util.List;
 
@@ -98,6 +100,31 @@ public class MainActivity extends AppCompatActivity {
         this.addTime.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                RadialTimePickerDialogFragment rtpd = new RadialTimePickerDialogFragment()
+                        .setOnTimeSetListener(new RadialTimePickerDialogFragment.OnTimeSetListener() {
+                            @Override
+                            public void onTimeSet(RadialTimePickerDialogFragment dialog, int hourOfDay, int minute) {
+                                String time = hourOfDay + ":" + (minute >= 10 ? minute : ("0" + minute));
+                                if (!dataManager.containsTime(time)) {
+                                    dataManager.addTime(time);
+                                    addAlarm(hourOfDay, minute);
+                                    updateTimeList();
+                                } else {
+                                    Toast.makeText(MainActivity.this, "This time is already in your list.", Toast.LENGTH_LONG).show();
+                                }
+                            }
+                        })
+                        .setStartTime(7, 0)
+                        .setDoneText("Ok")
+                        .setCancelText("Cancel")
+                        .setThemeLight();
+                rtpd.show(getSupportFragmentManager(), "Test");
+            }
+        });
+/*
+        this.addTime.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
                 final Calendar myCalendar = Calendar.getInstance();
                 final int hour = myCalendar.get(Calendar.HOUR_OF_DAY);
                 int minute = myCalendar.get(Calendar.MINUTE);
@@ -117,7 +144,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
         });
-
+*/
 
         this.timeList.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             @Override
