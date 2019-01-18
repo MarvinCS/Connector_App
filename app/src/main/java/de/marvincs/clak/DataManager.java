@@ -2,140 +2,137 @@ package de.marvincs.clak;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.text.TextUtils;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 
 /**
- * Datamanagement SINGLETON
+ * Datamanagement
  */
-public class DataManager implements Serializable {
+public class DataManager implements Parcelable {
 
-    private static DataManager instance;
+    private static final String sharedPreferencesName = "Prefs";
+    private String loginid, password, network;
+    private List<String> times;
 
 
-    private SharedPreferences sharedPreferences;
-    private Map<String, String> credentials;
-    private List<Calendar> times;
+    public DataManager(Context c) {
+        this.load(c);
+    }
 
-    static DataManager getInstance(SharedPreferences sharedPref) {
-        if (instance == null) {
-            instance = new DataManager();
+    public DataManager(Parcel in) {
+        this.loginid = in.readString();
+        this.password = in.readString();
+        this.network = in.readString();
+        times = new ArrayList<>();
+        in.readStringList(this.times);
+    }
+
+    public static final Creator<DataManager> CREATOR = new Creator<DataManager>() {
+        @Override
+        public DataManager createFromParcel(Parcel in) {
+            return new DataManager(in);
         }
-        instance.setPreferences(sharedPref);
-        return instance;
-    }
 
-    private DataManager() {
-    }
+        @Override
+        public DataManager[] newArray(int size) {
+            return new DataManager[size];
+        }
+    };
 
     void load(Context c) {
-        this.credentials = new HashMap<>();
         this.times = new ArrayList<>();
+        c.getSharedPreferences(sharedPreferencesName, Context.MODE_MULTI_PROCESS);
         this.loadCredentials(c);
         this.loadTimes(c);
     }
 
     private void loadCredentials(Context c) {
         String defaultValue = c.getResources().getString(R.string.credentials_default);
+        SharedPreferences sp = c.getSharedPreferences(sharedPreferencesName, Context.MODE_MULTI_PROCESS);
 
-        String loginID = this.sharedPreferences.getString(c.getString(R.string.credentials_loginID), defaultValue);
+        String loginID = sp.getString(c.getString(R.string.credentials_loginID), defaultValue);
         if (!loginID.equals(defaultValue)) {
-            this.credentials.put("loginid", loginID);
+            setLoginID(loginID);
         }
 
-        String password = this.sharedPreferences.getString(c.getString(R.string.credentials_password), defaultValue);
+        String password = sp.getString(c.getString(R.string.credentials_password), defaultValue);
         if (!password.equals(defaultValue)) {
-            this.credentials.put("password", password);
+            setPassword(password);
         }
 
-        String network = this.sharedPreferences.getString(c.getString(R.string.credentials_network), defaultValue);
+        String network = sp.getString(c.getString(R.string.credentials_network), defaultValue);
         if (!network.equals(defaultValue)) {
-            this.credentials.put("network", network);
+            setNetwork(network);
         }
 
     }
 
     private void loadTimes(Context c) {
         String defaultValue = c.getResources().getString(R.string.credentials_default);
+        SharedPreferences sp = c.getSharedPreferences(sharedPreferencesName, Context.MODE_MULTI_PROCESS);
 
-        String serialized = this.sharedPreferences.getString(c.getString(R.string.times), defaultValue);
+        String serialized = sp.getString(c.getString(R.string.times), defaultValue);
         if (serialized != defaultValue) {
             List<String> list = Arrays.asList(TextUtils.split(serialized, ","));
-            for (String time : list) {
-                Calendar cal = Calendar.getInstance();
-                cal.set(Calendar.HOUR_OF_DAY, Integer.valueOf(time.split(":")[0]));
-                cal.set(Calendar.MINUTE, Integer.valueOf(time.split(":")[1]));
-                this.times.add(cal);
-            }
+            this.times = new ArrayList<>(list);
         }
     }
 
 
     void save(Context c) {
-        SharedPreferences.Editor editor = this.sharedPreferences.edit();
+        SharedPreferences sp = c.getSharedPreferences(sharedPreferencesName, Context.MODE_MULTI_PROCESS);
+
+        SharedPreferences.Editor editor = sp.edit();
         editor.putString(c.getString(R.string.credentials_loginID), getLoginID());
         editor.putString(c.getString(R.string.credentials_password), getPassword());
         editor.putString(c.getString(R.string.credentials_network), getNetwork());
 
-        List<String> t = new ArrayList<>();
-        for (Calendar calendar : this.times) {
-            t.add(calendarToTime(calendar));
-        }
-
-        editor.putString(c.getString(R.string.times), TextUtils.join(",", t));
+        editor.putString(c.getString(R.string.times), TextUtils.join(",", this.times));
         editor.apply();
     }
 
-
-    void setPreferences(SharedPreferences sharedPref) {
-        this.sharedPreferences = sharedPref;
-    }
-
     String getLoginID() {
-        return this.credentials.get("loginid");
+        return this.loginid;
     }
 
     String getPassword() {
-        return this.credentials.get("password");
+        return this.password;
     }
 
     String getNetwork() {
-        return this.credentials.get("network");
+        return this.network;
     }
 
     void setLoginID(String loginID) {
-        this.credentials.put("loginid", loginID);
+        this.loginid = loginID;
     }
 
     void setPassword(String password) {
-        this.credentials.put("password", password);
-
+        this.password = password;
     }
 
     void setNetwork(String network) {
-        this.credentials.put("network", network);
-
+        this.network = network;
     }
 
-    boolean addTime(Calendar e) {
-        if (!containsTime(e)) {
-            this.times.add(e);
+    boolean addTime(String time) {
+        if (!containsTime(time)) {
+            this.times.add(time);
             return true;
         }
         return false;
     }
 
-    boolean containsTime(Calendar e) {
+    boolean containsTime(String time) {
         for (int i = 0; i < this.times.size(); i++) {
-            if (calendarToTime(this.times.get(i)).equals(calendarToTime(e))) {
+            if (this.times.get(i).equals(time)) {
                 return true;
             }
         }
@@ -144,7 +141,17 @@ public class DataManager implements Serializable {
 
     boolean removeTime(Calendar e) {
         for (int i = 0; i < this.times.size(); i++) {
-            if (calendarToTime(this.times.get(i)).equals(calendarToTime(e))) {
+            if (this.times.get(i).equals(calendarToTime(e))) {
+                this.times.remove(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    boolean removeTime(String time) {
+        for (int i = 0; i < this.times.size(); i++) {
+            if (this.times.get(i).equals(time)) {
                 this.times.remove(i);
                 return true;
             }
@@ -158,9 +165,24 @@ public class DataManager implements Serializable {
         return (hour + ":" + (min >= 10 ? min : "0" + min));
     }
 
-    List<Calendar> getTimes() {
+    List<String> getTimes() {
         return this.times;
     }
 
+    @Override
+    public int describeContents() {
+        return 0;
+    }
 
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeString(loginid);
+        dest.writeString(password);
+        dest.writeString(network);
+        dest.writeStringList(this.times);
+    }
+
+    boolean credentialsStored() {
+        return loginid != null && password != null && network != null;
+    }
 }

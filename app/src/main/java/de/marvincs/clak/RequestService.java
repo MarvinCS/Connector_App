@@ -1,12 +1,7 @@
 package de.marvincs.clak;
 
 import android.app.IntentService;
-import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.preference.PreferenceManager;
-import android.support.annotation.NonNull;
-import android.support.v4.app.JobIntentService;
 import android.util.Log;
 
 
@@ -19,33 +14,40 @@ import static de.marvincs.clak.Network.*;
  * TODO: Customize class - update intent actions, extra parameters and static
  * helper methods.
  */
-public class RequestService extends JobIntentService {
+public class RequestService extends IntentService {
 
-    public static final String DATAMANAGER = "DataManager";
-    protected static final String ACTION_CHECK = "CHECK_CONNECTION";
-    protected static final String ACTION_CONNECT = "CONNECT";
-    protected static final String ACTION_SAVE_CREDENTIALS = "SAVE";
+    static final String ACTION_CONNECT = "CONNECT";
 
-    private static final int UNIQUE_JOB_ID = 1337;
+    private DataManager dataManager;
+    private MyNotificationManager mnm;
 
-    /*static void enqueueWork(Context ctxt, Intent intent) {
-        enqueueWork(ctxt, RequestService.class, UNIQUE_JOB_ID, new Intent(ctxt, RequestService.class));
-    }*/
+
+    /**
+     * Creates an IntentService.  Invoked by your subclass's constructor.
+     */
+    public RequestService() {
+        super("CLAK - Request Service");
+        Log.i("MCSAPP - RequestService", "Create Service");
+        mnm = new MyNotificationManager(this);
+    }
+
 
     @Override
-    protected void onHandleWork(@NonNull Intent intent) {
+    protected void onHandleIntent(Intent intent) {
         Log.i("MCSAPP - RequestService", "Called onHandleWork");
-        DataManager dataManager = DataManager.getInstance(PreferenceManager.getDefaultSharedPreferences(this));
         final String action = intent.getAction();
-        final String network = intent.getStringExtra(NETWORKNAME);
-        if (check_rub_network(getApplicationContext(), network)) {
-            if (ACTION_CHECK.equals(action)) {
-                handleActionCheck();
-            } else if (ACTION_CONNECT.equals(action)) {
-                handleActionFetchIP();
-                handleActionLogin(intent.getStringExtra(LOGINID), intent.getStringExtra(PASSWORD), intent.getStringExtra(IPADRESS));
-            } else if (ACTION_SAVE_CREDENTIALS.equals(action)) {
-                handleActionSaveCredentials((DataManager) intent.getSerializableExtra(DATAMANAGER));
+        this.dataManager = new DataManager(this);
+        if (dataManager.credentialsStored()) {
+            if (check_rub_network(this, dataManager.getNetwork()) && ACTION_CONNECT.equals(action)) {
+                String ip = handleActionFetchIP();
+                Log.i("MCSAPP - RequestService", "ip: " + ip);
+                if (ip != null) {
+                    handleActionLogin(ip);
+                } else {
+                    mnm.notRUBNetwork(this);
+                }
+            } else {
+                mnm.notSelectedWIFI(this);
             }
         }
     }
@@ -54,11 +56,19 @@ public class RequestService extends JobIntentService {
     /**
      * Handle Login
      *
-     * @param loginid
-     * @param password
      * @param ip
      */
-    private void handleActionLogin(String loginid, String password, String ip) {
+    private boolean handleActionLogin(String ip) {
+        Log.i("MCSAPP - RequestService", "Called Login");
+        String answere = Network.login(dataManager.getLoginID(), dataManager.getPassword(), ip);
+        if (answere.contains("Authentisierung fehlgeschlagen")) {
+            mnm.wrongCredentials(this);
+            return false;
+        } else if (answere.contains("Authentisierung gelungen")) {
+            mnm.connected(this);
+            return true;
+        }
+        return false;
     }
 
 
@@ -66,23 +76,8 @@ public class RequestService extends JobIntentService {
      * Handle action Fetch IP in the provided background thread with the provided
      * parameters.
      */
-    private void handleActionFetchIP() {
+    private String handleActionFetchIP() {
+        Log.i("MCSAPP - RequestService", "Called fetchIP");
+        return Network.fetch_ip();
     }
-
-
-    /**
-     * Handle action Check in the provided background thread with the provided
-     * parameters.
-     */
-    private void handleActionCheck() {
-    }
-
-
-    private void handleActionSaveCredentials(DataManager dataManager) {
-        dataManager.setPreferences(PreferenceManager.getDefaultSharedPreferences(this));
-        dataManager.save(this);
-        Log.i("MCSAPP - RequestService", dataManager.getLoginID());
-
-    }
-
 }

@@ -1,7 +1,6 @@
 package de.marvincs.clak;
 
 import android.content.Context;
-import android.content.Intent;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
@@ -23,19 +22,18 @@ public class Network {
     // URLs
     private static final String IP_URL = "https://login.rz.ruhr-uni-bochum.de/cgi-bin/start";
     private static final String CONNECT_URL = "https://login.rz.ruhr-uni-bochum.de/cgi-bin/laklogin";
-    private static final String CHECK_URL = "http://google.com";
 
     // Parameter
-    protected static final String LOGINID = "loginid";
-    protected static final String PASSWORD = "password";
-    protected static final String IPADRESS = "ipaddr";
-    protected static final String ACTION = "action";
-    protected static final String HTTP_ACTION = "action";
-    protected static final String NETWORKNAME = "networkname";
+    static final String LOGINID = "loginid";
+    static final String PASSWORD = "password";
+    static final String IPADRESS = "ipaddr";
+    static final String ACTION = "action";
+    static final String HTTP_ACTION = "action";
+    static final String NETWORKNAME = "networkname";
 
     // Regex to get IP
-    protected static final Pattern IP_REGEX = Pattern.compile("(?<=name=\"ipaddr\" value=\")[\\d\\.]+");
-    protected static String ip;
+    static final Pattern IP_REGEX = Pattern.compile("(?<=name=\"ipaddr\" value=\")[\\d\\.]+");
+    static String ip;
 
 
     private static String getRequestBody(String username, String password, String ip) {
@@ -58,7 +56,7 @@ public class Network {
         return sb.toString();
     }
 
-    public static boolean check_rub_network(Context context, String network) {
+    static boolean check_rub_network(Context context, String network) {
         WifiManager wifi = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         if (!wifi.isWifiEnabled()) {
             return false;
@@ -68,7 +66,7 @@ public class Network {
             NetworkInfo.DetailedState state = WifiInfo.getDetailedStateOf(wifiInfo.getSupplicantState());
             if (state == NetworkInfo.DetailedState.CONNECTED || state == NetworkInfo.DetailedState.OBTAINING_IPADDR) {
                 String ssid = wifiInfo.getSSID().trim();
-                ssid = ssid.substring(1, ssid.length());
+                ssid = ssid.substring(1);
                 ssid = ssid.substring(0, ssid.length() - 1);
                 return ssid.toLowerCase().equals(network.trim().toLowerCase());
             }
@@ -77,8 +75,9 @@ public class Network {
     }
 
 
-    protected int login(String loginid, String password, String ip) {
+    static String login(String loginid, String password, String ip) {
         Log.i("MCSAPP - Network", "Logging in");
+        String answere = "";
         URL url;
         HttpURLConnection connection = null;
         int responseCode = 0;
@@ -114,6 +113,7 @@ public class Network {
             }
             rd.close();
             responseCode = connection.getResponseCode();
+            answere = response.toString();
             Log.i("MCSAPP", response.toString());
         } catch (Exception e) {
             e.printStackTrace();
@@ -122,37 +122,11 @@ public class Network {
                 connection.disconnect();
             }
         }
-        return responseCode;
+        return answere;
     }
 
 
-    public boolean isConnected() {
-        URL url = null;
-        try {
-            url = new URL(CHECK_URL);
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
-        }
-        HttpURLConnection urlConnection = null;
-        try {
-            urlConnection = (HttpURLConnection) url.openConnection();
-            urlConnection.setRequestMethod("HEAD");
-            urlConnection.setConnectTimeout(10000); //set timeout to 5 seconds
-            int statusCode = urlConnection.getResponseCode();
-            Log.d("", "" + statusCode);
-        } catch (java.net.SocketTimeoutException e) {
-            return false;
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            if (urlConnection != null) {
-                urlConnection.disconnect();
-            }
-        }
-        return true;
-    }
-
-    protected String fetch_ip() {
+    static String fetch_ip() {
         Log.i("MCSAPP", "fetchingIP");
         URL url = null;
         try {

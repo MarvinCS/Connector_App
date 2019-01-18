@@ -23,6 +23,8 @@
     <string name="enable_gps">You have to enable GPS</string>
     <string name="fetch_ip">Fetch your IP</string>
     <string name="description_credentials">Enter your access data for the university network here and press the button to select your WLAN network.</string>
-    <string name="description_times">Add the times you want to be connected to below. Use the button to add a new time or hold a time to remove it.</string>
+    <string name="description_times">Add the times you want to be connected to below. Use the button to add a new time or touch a time to remove it.</string>
     <string name="times">list_of_times</string>
+    <string name="channel_name">CLAK_CHANNEL</string>
+    <string name="channel_description">A channel to deliver notifications from CALK applicatino</string>
 </resources>

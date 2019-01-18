@@ -1,7 +1,9 @@
 package de.marvincs.clak;
 
 import android.Manifest;
+import android.app.AlarmManager;
 import android.app.AlertDialog;
+import android.app.PendingIntent;
 import android.app.TimePickerDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -12,7 +14,6 @@ import android.location.LocationManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -27,31 +28,17 @@ import android.widget.ListView;
 import android.widget.TimePicker;
 import android.widget.Toast;
 
-
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-import static de.marvincs.clak.DataManager.calendarToTime;
+import static de.marvincs.clak.Network.check_rub_network;
 
 
 public class MainActivity extends AppCompatActivity {
 
     // Edittexts and Buttons in View
     private EditText loginID, password;
-    private Button network, addTime;
+    private Button network, addTime, connectNow;
     private BroadcastReceiver wifiReceiver;
 
     // For WifiPicker
@@ -66,18 +53,14 @@ public class MainActivity extends AppCompatActivity {
     private DataManager dataManager;
 
 
-    private static final String IP_URL = "https://login.rz.ruhr-uni-bochum.de/cgi-bin/start";
-    private static final Pattern IP_REGEX = Pattern.compile("(?<=name=\"ipaddr\" value=\")[\\d\\.]+");
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
-        this.dataManager = DataManager.getInstance(PreferenceManager.getDefaultSharedPreferences(this));
+        this.dataManager = new DataManager(this);
         this.bindViewElements();
-        this.readCredentials();
-        this.getTimes();
+        this.load();
         this.updateTimeList();
         registerReceiver(wifiReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
         IntentFilter intentFilter = new IntentFilter();
@@ -85,21 +68,12 @@ public class MainActivity extends AppCompatActivity {
         this.registerReceiver(wifiReceiver, intentFilter);
     }
 
-
     @Override
-    protected void onPause() {
-        super.onPause();
+    protected void onStop() {
+        super.onStop();
+        Log.i("MCSAPP - onStop", "Called onStop");
         save();
-        saveInService();
     }
-
-    private void saveInService() {
-        Intent myIntent = new Intent(getApplicationContext(), RequestService.class);
-        myIntent.putExtra(RequestService.DATAMANAGER, dataManager);
-        myIntent.setAction(RequestService.ACTION_SAVE_CREDENTIALS);
-        startService(myIntent);
-    }
-
 
     private void bindViewElements() {
         this.loginID = findViewById(R.id.et_loginID);
@@ -107,6 +81,7 @@ public class MainActivity extends AppCompatActivity {
         this.network = findViewById(R.id.btn_wifipicker);
         this.addTime = findViewById(R.id.btn_addTime);
         this.timeList = findViewById(R.id.timeList);
+        this.connectNow = findViewById(R.id.btn_connectNow);
         wifiReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context c, Intent intent) {
@@ -129,11 +104,10 @@ public class MainActivity extends AppCompatActivity {
                 new TimePickerDialog(MainActivity.this, new TimePickerDialog.OnTimeSetListener() {
                     @Override
                     public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
-                        Calendar c = Calendar.getInstance();
-                        c.set(Calendar.HOUR_OF_DAY, hourOfDay);
-                        c.set(Calendar.MINUTE, minute);
-                        if (!dataManager.containsTime(c)) {
-                            dataManager.addTime(c);
+                        String time = hourOfDay + ":" + (minute >= 10 ? minute : ("0" + minute));
+                        if (!dataManager.containsTime(time)) {
+                            dataManager.addTime(time);
+                            addAlarm(hourOfDay, minute);
                             updateTimeList();
                         } else {
                             Toast.makeText(MainActivity.this, "This time is already in your list.", Toast.LENGTH_LONG).show();
@@ -145,13 +119,15 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-        this.timeList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        this.timeList.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             @Override
-            public void onItemClick(AdapterView<?> parent, View view,
-                                    int position, long id) {
-                Toast.makeText(getApplicationContext(),
-                        "Click ListItem Number " + position, Toast.LENGTH_LONG)
-                        .show();
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                String time = (String) timeList.getItemAtPosition(position);
+                dataManager.removeTime(time);
+                updateTimeList();
+                cancleAlarms();
+                addAlarms(dataManager.getTimes());
+                return true;
             }
         });
 
@@ -165,6 +141,26 @@ public class MainActivity extends AppCompatActivity {
                     startActivity(myIntent);
                 }
                 listNetworks();
+            }
+        });
+
+        this.connectNow.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                save();
+                if (dataManager.credentialsStored()) {
+                    if (check_rub_network(getApplicationContext(), dataManager.getNetwork())) {
+                        Intent myIntent = new Intent(MainActivity.this, RequestService.class);
+                        myIntent.setAction(RequestService.ACTION_CONNECT);
+                        Log.i("MCSAPP", "Connect Now!");
+                        startService(myIntent);
+                        Toast.makeText(MainActivity.this, "You will be connected in a few seconds", Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(MainActivity.this, "Sorry, but you are not in your selected network", Toast.LENGTH_LONG).show();
+                    }
+                } else {
+                    Toast.makeText(MainActivity.this, "Please enter your access data and choose your network", Toast.LENGTH_LONG).show();
+                }
             }
         });
     }
@@ -212,63 +208,13 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    private String fetch_ip() {
-        URL url = null;
-        try {
-            url = new URL(IP_URL);
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
-        }
-        HttpURLConnection urlConnection = null;
-        try {
-            urlConnection = (HttpURLConnection) url.openConnection();
-            urlConnection.setRequestProperty("User-Agent", "Mozilla/5.0 ( compatible ) ");
-            urlConnection.setRequestProperty("Accept", "*/*");
-            urlConnection.setRequestProperty("connection", "close");
-
-            InputStream in = new BufferedInputStream(urlConnection.getInputStream());
-            BufferedReader r = new BufferedReader(new InputStreamReader(in));
-            StringBuilder total = new StringBuilder();
-            String line;
-
-            while ((line = r.readLine()) != null) {
-                if (line.contains("name=\"ipaddr\"")) {
-                    total.append(line);
-                    break;
-                }
-            }
-
-            Matcher m = IP_REGEX.matcher(total.toString());
-            if (m.find()) {
-                return m.group(0);
-            }
-        } catch (IOException e) {
-            Toast.makeText(getApplicationContext(), "An error has occurred. Please check your internet connection.", Toast.LENGTH_LONG).show();
-        } finally {
-            if (urlConnection != null) {
-                urlConnection.disconnect();
-            }
-        }
-        return null;
-    }
-
-
-    private void getTimes() {
-        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss", Locale.GERMANY);
-        dataManager.getTimes();
-    }
-
     void updateTimeList() {
-        List<String> timeList = new ArrayList<>();
-        for (Calendar time : this.dataManager.getTimes()) {
-            timeList.add(calendarToTime(time));
-        }
         // Create ArrayAdapter using the planet list.
-        listAdapter = new ArrayAdapter<>(this, R.layout.simplerow, timeList);
+        listAdapter = new ArrayAdapter<>(this, R.layout.simplerow, this.dataManager.getTimes());
         this.timeList.setAdapter(listAdapter);
     }
 
-    private void readCredentials() {
+    private void load() {
         dataManager.load(this);
         if (dataManager.getLoginID() != null) {
             this.loginID.setText(dataManager.getLoginID());
@@ -278,6 +224,15 @@ public class MainActivity extends AppCompatActivity {
         }
         if (dataManager.getNetwork() != null) {
             this.network.setText(dataManager.getNetwork());
+        }
+
+        if (!dataManager.credentialsStored() && dataManager.getTimes().isEmpty()) {
+            int hourOfDay = 7;
+            int minute = 0;
+            String time = hourOfDay + ":" + (minute >= 10 ? minute : ("0" + minute));
+            dataManager.addTime(time);
+            addAlarm(hourOfDay, minute);
+            updateTimeList();
         }
     }
 
@@ -297,4 +252,33 @@ public class MainActivity extends AppCompatActivity {
         dataManager.save(this);
     }
 
+    void addAlarms(List<String> times) {
+        for (String time : times) {
+            String hour = time.split(":")[0];
+            String minute = time.split(":")[1];
+            addAlarm(Integer.parseInt(hour), Integer.parseInt(minute));
+        }
+    }
+
+    void addAlarm(int hourOfDay, int minute) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.HOUR_OF_DAY, hourOfDay);
+        calendar.set(Calendar.MINUTE, minute);
+        calendar.set(Calendar.SECOND, 1);
+        Intent myIntent = new Intent(this, RequestService.class);
+        myIntent.setAction(RequestService.ACTION_CONNECT);
+        PendingIntent pi = PendingIntent.getService(this, 0, myIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        AlarmManager am = (AlarmManager) this.getSystemService(Context.ALARM_SERVICE);
+        //am.setExact(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), pi);
+        am.setRepeating(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), AlarmManager.INTERVAL_DAY, pi);
+        Log.i("MCSAPP", "Added Alarm: " + hourOfDay + ":" + minute + ":" + 10);
+    }
+
+    void cancleAlarms() {
+        Intent myIntent = new Intent(this, RequestService.class);
+        myIntent.setAction(RequestService.ACTION_CONNECT);
+        AlarmManager am = (AlarmManager) this.getSystemService(Context.ALARM_SERVICE);
+        am.cancel(PendingIntent.getService(this, 0, myIntent, PendingIntent.FLAG_UPDATE_CURRENT));
+        Log.i("MCSAPP", "Canceled Alarms: ");
+    }
 }
