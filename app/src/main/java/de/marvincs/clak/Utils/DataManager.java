@@ -1,4 +1,4 @@
-package de.marvincs.clak;
+package de.marvincs.clak.Utils;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
+
+import de.marvincs.clak.R;
 
 
 /**
@@ -46,7 +48,7 @@ public class DataManager implements Parcelable {
         }
     };
 
-    void load(Context c) {
+    public void load(Context c) {
         this.times = new ArrayList<>();
         c.getSharedPreferences(sharedPreferencesName, Context.MODE_MULTI_PROCESS);
         this.loadCredentials(c);
@@ -86,7 +88,7 @@ public class DataManager implements Parcelable {
     }
 
 
-    void save(Context c) {
+    public void save(Context c) {
         SharedPreferences sp = c.getSharedPreferences(sharedPreferencesName, Context.MODE_MULTI_PROCESS);
 
         SharedPreferences.Editor editor = sp.edit();
@@ -98,31 +100,31 @@ public class DataManager implements Parcelable {
         editor.apply();
     }
 
-    String getLoginID() {
+    public String getLoginID() {
         return this.loginid;
     }
 
-    String getPassword() {
+    public String getPassword() {
         return this.password;
     }
 
-    String getNetwork() {
+    public String getNetwork() {
         return this.network;
     }
 
-    void setLoginID(String loginID) {
+    public void setLoginID(String loginID) {
         this.loginid = loginID;
     }
 
-    void setPassword(String password) {
+    public void setPassword(String password) {
         this.password = password;
     }
 
-    void setNetwork(String network) {
+    public void setNetwork(String network) {
         this.network = network;
     }
 
-    boolean addTime(String time) {
+    public boolean addTime(String time) {
         if (!containsTime(time)) {
             this.times.add(time);
             return true;
@@ -130,7 +132,7 @@ public class DataManager implements Parcelable {
         return false;
     }
 
-    boolean containsTime(String time) {
+    public boolean containsTime(String time) {
         for (int i = 0; i < this.times.size(); i++) {
             if (this.times.get(i).equals(time)) {
                 return true;
@@ -139,7 +141,7 @@ public class DataManager implements Parcelable {
         return false;
     }
 
-    boolean removeTime(Calendar e) {
+    public boolean removeTime(Calendar e) {
         for (int i = 0; i < this.times.size(); i++) {
             if (this.times.get(i).equals(calendarToTime(e))) {
                 this.times.remove(i);
@@ -149,7 +151,7 @@ public class DataManager implements Parcelable {
         return false;
     }
 
-    boolean removeTime(String time) {
+    public boolean removeTime(String time) {
         for (int i = 0; i < this.times.size(); i++) {
             if (this.times.get(i).equals(time)) {
                 this.times.remove(i);
@@ -159,13 +161,13 @@ public class DataManager implements Parcelable {
         return false;
     }
 
-    static String calendarToTime(Calendar e) {
+    public static String calendarToTime(Calendar e) {
         int hour = e.get(Calendar.HOUR_OF_DAY);
         int min = e.get(Calendar.MINUTE);
         return (hour + ":" + (min >= 10 ? min : "0" + min));
     }
 
-    List<String> getTimes() {
+    public List<String> getTimes() {
         return this.times;
     }
 
@@ -182,7 +184,7 @@ public class DataManager implements Parcelable {
         dest.writeStringList(this.times);
     }
 
-    boolean credentialsStored() {
+    public boolean credentialsStored() {
         return loginid != null && password != null && network != null;
     }
 }

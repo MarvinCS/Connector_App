@@ -1,4 +1,4 @@
-package de.marvincs.clak;
+package de.marvincs.clak.Utils;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -6,6 +6,8 @@ import android.content.Context;
 import android.os.Build;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
+
+import de.marvincs.clak.R;
 
 public class MyNotificationManager {
 
@@ -38,7 +40,7 @@ public class MyNotificationManager {
         notificationManager.notify(notificationID++, mBuilder.build());
     }
 
-    void connected(Context ctx) {
+    public void connected(Context ctx) {
         NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(ctx, "CLAK")
                 .setSmallIcon(R.drawable.ic_stat_leak_add)
                 .setContentTitle("CLAK - Connected")
@@ -48,7 +50,7 @@ public class MyNotificationManager {
 
     }
 
-    void notRUBNetwork(Context ctx) {
+    public void notRUBNetwork(Context ctx) {
         NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(ctx, "CLAK")
                 .setSmallIcon(R.drawable.ic_stat_leak_remove)
                 .setContentTitle("CLAK - Not connected")
@@ -57,7 +59,7 @@ public class MyNotificationManager {
         show(ctx, mBuilder);
     }
 
-    void notSelectedWIFI(Context ctx) {
+    public void notSelectedWIFI(Context ctx) {
         NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(ctx, "CLAK")
                 .setSmallIcon(R.drawable.ic_stat_leak_remove)
                 .setContentTitle("CLAK - Not connected")
@@ -66,7 +68,7 @@ public class MyNotificationManager {
         show(ctx, mBuilder);
     }
 
-    void wrongCredentials(Context ctx) {
+    public void wrongCredentials(Context ctx) {
         NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(ctx, "CLAK")
                 .setSmallIcon(R.drawable.ic_stat_leak_remove)
                 .setContentTitle("CLAK - Not connected")

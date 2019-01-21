@@ -1,4 +1,4 @@
-package de.marvincs.clak;
+package de.marvincs.clak.Utils;
 
 import android.content.Context;
 import android.net.NetworkInfo;
@@ -56,7 +56,7 @@ public class Network {
         return sb.toString();
     }
 
-    static boolean check_rub_network(Context context, String network) {
+    public static boolean check_rub_network(Context context, String network) {
         WifiManager wifi = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         if (!wifi.isWifiEnabled()) {
             return false;
@@ -75,7 +75,7 @@ public class Network {
     }
 
 
-    static String login(String loginid, String password, String ip) {
+    public static String login(String loginid, String password, String ip) {
         Log.i("MCSAPP - Network", "Logging in");
         String answere = "";
         URL url;
@@ -126,7 +126,7 @@ public class Network {
     }
 
 
-    static String fetch_ip() {
+    public static String fetch_ip() {
         Log.i("MCSAPP", "fetchingIP");
         URL url = null;
         try {

@@ -1,15 +1,16 @@
-package de.marvincs.clak;
+package de.marvincs.clak.Activities;
 
 import android.Manifest;
-import android.app.AlarmManager;
+import android.app.ActionBar;
 import android.app.AlertDialog;
-import android.app.PendingIntent;
 import android.app.TimePickerDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.location.LocationManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
@@ -23,17 +24,19 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-
 import android.widget.ListView;
 import android.widget.TimePicker;
 import android.widget.Toast;
 
-import com.codetroopers.betterpickers.radialtimepicker.RadialTimePickerDialogFragment;
-
 import java.util.Calendar;
 import java.util.List;
 
-import static de.marvincs.clak.Network.check_rub_network;
+import de.marvincs.clak.R;
+import de.marvincs.clak.Services.RequestService;
+import de.marvincs.clak.Utils.DataManager;
+import de.marvincs.clak.Utils.MyAlarmManager;
+
+import static de.marvincs.clak.Utils.Network.check_rub_network;
 
 
 public class MainActivity extends AppCompatActivity {
@@ -60,6 +63,8 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+        //ActionBar bar = getActionBar();
+        //bar.setBackgroundDrawable(new ColorDrawable(Color.BLUE));
         this.dataManager = new DataManager(this);
         this.bindViewElements();
         this.load();
@@ -71,9 +76,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        //this.checkBatteryOptimized();
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
-        Log.i("MCSAPP - onStop", "Called onStop");
         save();
     }
 
@@ -84,44 +94,17 @@ public class MainActivity extends AppCompatActivity {
         this.addTime = findViewById(R.id.btn_addTime);
         this.timeList = findViewById(R.id.timeList);
         this.connectNow = findViewById(R.id.btn_connectNow);
+
         wifiReceiver = new BroadcastReceiver() {
             @Override
-            public void onReceive(Context c, Intent intent) {
+            public void onReceive(Context context, Intent intent) {
                 if (mWifiManager != null) {
                     List<ScanResult> results = mWifiManager.getScanResults();
-                    for (ScanResult result : results) {
-                        Log.d("name", result.toString());
-                    }
                     showWifiListDialog(results);
                 }
             }
         };
 
-        this.addTime.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                RadialTimePickerDialogFragment rtpd = new RadialTimePickerDialogFragment()
-                        .setOnTimeSetListener(new RadialTimePickerDialogFragment.OnTimeSetListener() {
-                            @Override
-                            public void onTimeSet(RadialTimePickerDialogFragment dialog, int hourOfDay, int minute) {
-                                String time = hourOfDay + ":" + (minute >= 10 ? minute : ("0" + minute));
-                                if (!dataManager.containsTime(time)) {
-                                    dataManager.addTime(time);
-                                    addAlarm(hourOfDay, minute);
-                                    updateTimeList();
-                                } else {
-                                    Toast.makeText(MainActivity.this, "This time is already in your list.", Toast.LENGTH_LONG).show();
-                                }
-                            }
-                        })
-                        .setStartTime(7, 0)
-                        .setDoneText("Ok")
-                        .setCancelText("Cancel")
-                        .setThemeLight();
-                rtpd.show(getSupportFragmentManager(), "Test");
-            }
-        });
-/*
         this.addTime.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -134,8 +117,9 @@ public class MainActivity extends AppCompatActivity {
                         String time = hourOfDay + ":" + (minute >= 10 ? minute : ("0" + minute));
                         if (!dataManager.containsTime(time)) {
                             dataManager.addTime(time);
-                            addAlarm(hourOfDay, minute);
                             updateTimeList();
+                            save();
+                            MyAlarmManager.setSavedAlarms(MainActivity.this);
                         } else {
                             Toast.makeText(MainActivity.this, "This time is already in your list.", Toast.LENGTH_LONG).show();
                         }
@@ -144,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
         });
-*/
+
 
         this.timeList.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             @Override
@@ -152,8 +136,8 @@ public class MainActivity extends AppCompatActivity {
                 String time = (String) timeList.getItemAtPosition(position);
                 dataManager.removeTime(time);
                 updateTimeList();
-                cancleAlarms();
-                addAlarms(dataManager.getTimes());
+                save();
+                MyAlarmManager.setSavedAlarms(MainActivity.this);
                 return true;
             }
         });
@@ -179,7 +163,6 @@ public class MainActivity extends AppCompatActivity {
                     if (check_rub_network(getApplicationContext(), dataManager.getNetwork())) {
                         Intent myIntent = new Intent(MainActivity.this, RequestService.class);
                         myIntent.setAction(RequestService.ACTION_CONNECT);
-                        Log.i("MCSAPP", "Connect Now!");
                         startService(myIntent);
                         Toast.makeText(MainActivity.this, "You will be connected in a few seconds", Toast.LENGTH_LONG).show();
                     } else {
@@ -194,6 +177,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void listNetworks() {
+        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
         mWifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         mWifiManager.startScan();
         Toast.makeText(this, "Please wait a few seconds", Toast.LENGTH_LONG).show();
@@ -252,15 +236,6 @@ public class MainActivity extends AppCompatActivity {
         if (dataManager.getNetwork() != null) {
             this.network.setText(dataManager.getNetwork());
         }
-
-        if (!dataManager.credentialsStored() && dataManager.getTimes().isEmpty()) {
-            int hourOfDay = 7;
-            int minute = 0;
-            String time = hourOfDay + ":" + (minute >= 10 ? minute : ("0" + minute));
-            dataManager.addTime(time);
-            addAlarm(hourOfDay, minute);
-            updateTimeList();
-        }
     }
 
     /**
@@ -279,33 +254,4 @@ public class MainActivity extends AppCompatActivity {
         dataManager.save(this);
     }
 
-    void addAlarms(List<String> times) {
-        for (String time : times) {
-            String hour = time.split(":")[0];
-            String minute = time.split(":")[1];
-            addAlarm(Integer.parseInt(hour), Integer.parseInt(minute));
-        }
-    }
-
-    void addAlarm(int hourOfDay, int minute) {
-        Calendar calendar = Calendar.getInstance();
-        calendar.set(Calendar.HOUR_OF_DAY, hourOfDay);
-        calendar.set(Calendar.MINUTE, minute);
-        calendar.set(Calendar.SECOND, 1);
-        Intent myIntent = new Intent(this, RequestService.class);
-        myIntent.setAction(RequestService.ACTION_CONNECT);
-        PendingIntent pi = PendingIntent.getService(this, 0, myIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-        AlarmManager am = (AlarmManager) this.getSystemService(Context.ALARM_SERVICE);
-        //am.setExact(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), pi);
-        am.setRepeating(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), AlarmManager.INTERVAL_DAY, pi);
-        Log.i("MCSAPP", "Added Alarm: " + hourOfDay + ":" + minute + ":" + 10);
-    }
-
-    void cancleAlarms() {
-        Intent myIntent = new Intent(this, RequestService.class);
-        myIntent.setAction(RequestService.ACTION_CONNECT);
-        AlarmManager am = (AlarmManager) this.getSystemService(Context.ALARM_SERVICE);
-        am.cancel(PendingIntent.getService(this, 0, myIntent, PendingIntent.FLAG_UPDATE_CURRENT));
-        Log.i("MCSAPP", "Canceled Alarms: ");
-    }
 }
